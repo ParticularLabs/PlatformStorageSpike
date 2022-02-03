@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.32014.148
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlatformStorageSpike.Ingestor", "PlatformStorageSpike.Ingestor\PlatformStorageSpike.Ingestor.csproj", "{6FE1B31F-58B0-4088-8445-13CF167B2221}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6FE1B31F-58B0-4088-8445-13CF167B2221}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FE1B31F-58B0-4088-8445-13CF167B2221}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FE1B31F-58B0-4088-8445-13CF167B2221}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FE1B31F-58B0-4088-8445-13CF167B2221}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {108C772D-C307-4C3D-8AC6-4A77160D90E2}
+	EndGlobalSection
+EndGlobal
