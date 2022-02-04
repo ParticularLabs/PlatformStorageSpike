@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
-using PlatformStorageSpike.Ingestor.SQLAzure;
 
 namespace PlatformStorageSpike.Ingestor
 {
@@ -15,7 +14,7 @@ namespace PlatformStorageSpike.Ingestor
         //example: 10 SqlAzureAuditStore|AzureTableAuditStore {other storage specific options}
         static async Task Main(string[] args)
         {
-            var numTestMessages = int.Parse(args[0]);
+            var numberOfConversations = int.Parse(args[0]);
 
             var blobClient = new BlobServiceClient(Environment.GetEnvironmentVariable("PlatformSpike_BlobContainerConnectionString"));
             var blobContainerClient = blobClient.GetBlobContainerClient("platform-spike-storage");
@@ -25,59 +24,27 @@ namespace PlatformStorageSpike.Ingestor
             var indexStore = (IAuditIndexStore)Activator.CreateInstance(Type.GetType(args[1], true));
             var isConfirmed = true; //This would be false when transport tx mode > receive only
 
-            await indexStore.Initalize(args);
-            for (var i = 0; i < numTestMessages; i++)
+            await indexStore!.Initalize(args);
+            
+            var dataGenerator = new TestDataGenerator(numberOfConversations, 10);
+
+            foreach (var testData in dataGenerator.GetTestData())
             {
-                var processingAttempt = await StoreMessageBodyHeaderAndMetaInBlob(blobContainerClient, isConfirmed);
-                await indexStore.IndexMetadata(processingAttempt);
+                await StoreMessageBodyHeaderAndMetaInBlob(blobContainerClient, testData, isConfirmed);
+                await indexStore.IndexMetadata(testData.ProcessingMetadata);
             }
         }
 
-        static async Task<IDictionary<string, string>> StoreMessageBodyHeaderAndMetaInBlob(BlobContainerClient blobContainerClient, bool isConfirmed)
+        static async Task StoreMessageBodyHeaderAndMetaInBlob(BlobContainerClient blobContainerClient, TestData testData, bool isConfirmed)
         {
-            var processedAt = DateTimeOffset.UtcNow.ToString();
-            var messageId = "7d6bce1d-829b-4fba-abc6-ab2900b53718";
-            var conversationId = "b613bb02-a97e-4298-a9e9-ab2900b53723";
+            await StoreBodyAndHeaders(blobContainerClient, testData.Body, testData.Headers);
 
-            var body = new ReadOnlyMemory<byte>(new byte[5 * 1024]); //KB message body
-            var headers = new Dictionary<string, string>
-            {
-                {MetadataKeys.MessageId, messageId},
-                {MetadataKeys.ConversationId, conversationId},
-                {"NServiceBus.ContentType", "text/xml"},
-                {"NServiceBus.CorrelationId", "7d6bce1d-829b-4fba-abc6-ab2900b53718"},
-                {"NServiceBus.EnclosedMessageTypes", "Core7.Headers.Writers.MyNamespace.MessageToSend, MyAssembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"},
-                {"NServiceBus.MessageIntent", "Send"},
-                {"NServiceBus.OriginatingEndpoint", "HeaderWriterAuditV7"},
-                {"NServiceBus.OriginatingMachine", "MACHINENAME"},
-                {"NServiceBus.ReplyToAddress", "HeaderWriterAuditV7"},
-                {"NServiceBus.TimeSent", "2019-12-20 10:59:47:141171 Z"},
-                {"NServiceBus.Version", "7.2.0"},
-            };
-
-            var processingEndpoint = "MyProcessingEndpoint";
-            var processingId = DeterministicGuid.MakeId(messageId, processingEndpoint, processedAt).ToString();
-
-            var processingMetadata = new Dictionary<string, string>
-            {
-                { MetadataKeys.MessageId, messageId},
-                { MetadataKeys.ProcessingId, processingId },
-                { MetadataKeys.ConversationId, conversationId},
-                { "ProcessedAt", processedAt },
-                { "ProcessingEndpoint", processingEndpoint}
-            };
-
-            await StoreBodyAndHeaders(blobContainerClient, messageId, body, headers);
-
-            await StoreProcessingMetadata(blobContainerClient, processingId, processingMetadata, isConfirmed);
+            await StoreProcessingMetadata(blobContainerClient, testData.ProcessingMetadata, isConfirmed);
 
             if (!isConfirmed)
             {
-                await MarkProcessingMetadataAsConfirmed(blobContainerClient, processingId);
+                await MarkProcessingMetadataAsConfirmed(blobContainerClient, testData.Headers[MetadataKeys.ProcessingId]);
             }
-
-            return processingMetadata;
-
         }
 
         static Task MarkProcessingMetadataAsConfirmed(BlobContainerClient blobContainerClient, string processingAttemptId)
@@ -85,9 +52,9 @@ namespace PlatformStorageSpike.Ingestor
             throw new NotImplementedException();
         }
 
-        static Task StoreBodyAndHeaders(BlobContainerClient blobContainerClient, string messageId, ReadOnlyMemory<byte> body, IDictionary<string, string> headers)
+        static Task StoreBodyAndHeaders(BlobContainerClient blobContainerClient, ReadOnlyMemory<byte> body, IDictionary<string, string> headers)
         {
-            var blob = blobContainerClient.GetBlobClient(messageId);
+            var blob = blobContainerClient.GetBlobClient(headers[MetadataKeys.MessageId]);
 
             var options = new BlobUploadOptions
             {
@@ -102,13 +69,9 @@ namespace PlatformStorageSpike.Ingestor
                 CancellationToken.None);
         }
 
-        static Task StoreProcessingMetadata(
-            BlobContainerClient blobContainerClient,
-            string processingMetadataId,
-            IDictionary<string, string> processingMetadata,
-            bool isConfirmed)
+        static Task StoreProcessingMetadata(BlobContainerClient blobContainerClient, IDictionary<string, string> processingMetadata, bool isConfirmed)
         {
-            var blob = blobContainerClient.GetBlobClient(processingMetadataId);  //TODO: do we need a prefix?
+            var blob = blobContainerClient.GetBlobClient(processingMetadata[MetadataKeys.ProcessingId]);  //TODO: do we need a prefix?
 
             var options = new BlobUploadOptions
             {
@@ -120,5 +83,12 @@ namespace PlatformStorageSpike.Ingestor
                 options,
                 CancellationToken.None);
         }
+    }
+
+    class TestData
+    {
+        public byte[] Body { get; set; }
+        public Dictionary<string, string> Headers { get; set; }
+        public Dictionary<string,string> ProcessingMetadata { get; set; }
     }
 }
