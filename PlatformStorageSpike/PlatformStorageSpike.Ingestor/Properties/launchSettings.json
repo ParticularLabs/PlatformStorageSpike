@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "PlatformStorageSpike.Ingestor": {
+      "commandName": "Project",
+      "commandLineArgs": "10 AzureTableStorage"
+    }
+  }
+}

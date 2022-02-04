@@ -9,24 +9,37 @@ namespace PlatformStorageSpike.Ingestor
 {
     internal class Program
     {
-        static async Task  Main(string[] args)
+        // reguired env-variables: PlatformSpike_BlobContainerConnectionString => the storage account to store blobs
+        //example: 10 SqlAzure|AzureTableStorage {other storage specific options}
+        static async Task Main(string[] args)
         {
-            //HINT: Body and headers represent immutable information that do not change once defined. 
-            //      Metadata represents information that is specific to a concrete message handling.
-            var blobClient = new BlobServiceClient(Environment.GetEnvironmentVariable("PlatformSpike_BlobContainerConnectionString"));
+            var numTestMessages = int.Parse(args[0]);
 
+            var blobClient = new BlobServiceClient(Environment.GetEnvironmentVariable("PlatformSpike_BlobContainerConnectionString"));
             var blobContainerClient = blobClient.GetBlobContainerClient("platform-spike-storage");
             await blobContainerClient.CreateIfNotExistsAsync().ConfigureAwait(false);
 
+            var indexStore = (IIndexStore)Activator.CreateInstance(Type.GetType(args[1]));
+            var isConfirmed = true; //This would be false when transport tx mode > receive only
 
+            await indexStore.Initalize(args);
+            for (var i = 0; i < numTestMessages; i++)
+            {
+                var processingAttempt = await StoreMessageBodyHeaderAndMetaInBlob(blobContainerClient, isConfirmed);
+                await indexStore.IndexMetadata(processingAttempt);
+            }
+        }
+
+        static async Task<IDictionary<string, string>> StoreMessageBodyHeaderAndMetaInBlob(BlobContainerClient blobContainerClient, bool isConfirmed)
+        {
             var messageIdHeaderName = "NServiceBus.MessageId";
 
-            var body = new ReadOnlyMemory<byte>(new byte[5*1024]); //KB message body
+            var body = new ReadOnlyMemory<byte>(new byte[5 * 1024]); //KB message body
             var headers = new Dictionary<string, string>
             {
                 {messageIdHeaderName, "7d6bce1d-829b-4fba-abc6-ab2900b53718"},
                 {"NServiceBus.ContentType", "text/xml"},
-                {"NServiceBus.ConversationId", "b613bb02-a97e-4298-a9e9-ab2900b53723"},
+                {"NServiceBus.ConversationId", "b613bb02-a97e-4298-a9e  9-ab2900b53723"},
                 {"NServiceBus.CorrelationId", "7d6bce1d-829b-4fba-abc6-ab2900b53718"},
                 {"NServiceBus.EnclosedMessageTypes", "Core7.Headers.Writers.MyNamespace.MessageToSend, MyAssembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"},
                 {"NServiceBus.MessageIntent", "Send"},
@@ -39,25 +52,28 @@ namespace PlatformStorageSpike.Ingestor
 
             var messageId = headers[messageIdHeaderName];
 
-            await StoreBodyAndHeaders(blobContainerClient, messageId, body, headers);
 
             var processedAt = DateTimeOffset.UtcNow.ToString();
             var processingEndpoint = "MyProcessingEndpoint";
             var processingAttemptId = $"{messageId}-{processingEndpoint}-{processedAt}";
 
-            var processingMetadata = new Dictionary<string, string> 
+            var processingMetadata = new Dictionary<string, string>
             {
                 { "ProcessingAttemptId", processingAttemptId },
                 { "ProcessedAt", processedAt },
                 { "ProcessingEndpoint", processingEndpoint}
             };
 
-
-            var isConfirmed = false; // isConfirmed == TxLevel < AtomicSendsWithReceive
+            await StoreBodyAndHeaders(blobContainerClient, messageId, body, headers);
 
             await StoreProcessingMetadata(blobContainerClient, processingAttemptId, processingMetadata, isConfirmed);
 
-            await MarkProcessingMetadataAsConfirmed(blobContainerClient, processingAttemptId);
+            if (!isConfirmed)
+            {
+                await MarkProcessingMetadataAsConfirmed(blobContainerClient, processingAttemptId);
+            }
+
+            return processingMetadata;
 
         }
 
@@ -68,7 +84,6 @@ namespace PlatformStorageSpike.Ingestor
 
         static Task StoreBodyAndHeaders(BlobContainerClient blobContainerClient, string messageId, ReadOnlyMemory<byte> body, IDictionary<string, string> headers)
         {
-            //codify the update commit header on the blob
             var blob = blobContainerClient.GetBlobClient(messageId);
 
             var options = new BlobUploadOptions
@@ -76,7 +91,7 @@ namespace PlatformStorageSpike.Ingestor
                 Metadata = headers
             };
 
-            //TODO: store headers in a separate blob if size is above 8KB
+            //NOTE: store headers in a separate blob if size is above 8KB
 
             return blob.UploadAsync(
                 BinaryData.FromBytes(body),
@@ -85,8 +100,8 @@ namespace PlatformStorageSpike.Ingestor
         }
 
         static Task StoreProcessingMetadata(
-            BlobContainerClient blobContainerClient, 
-            string processingMetadataId, 
+            BlobContainerClient blobContainerClient,
+            string processingMetadataId,
             IDictionary<string, string> processingMetadata,
             bool isConfirmed)
         {
