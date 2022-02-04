@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-public class SqlAzure : IIndexStore
+public class AzureTableAuditStore : IAuditIndexStore
 {
     public Task IndexMetadata(IDictionary<string, string> processingAttempt)
     {

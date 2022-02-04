@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 
 namespace PlatformStorageSpike.Ingestor
 {
-    internal interface IIndexStore
+    internal interface IAuditIndexStore
     {
         Task Initalize(string[] args);
         Task IndexMetadata(IDictionary<string, string> processingAttempt);

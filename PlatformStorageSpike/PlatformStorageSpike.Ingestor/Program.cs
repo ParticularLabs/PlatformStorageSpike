@@ -10,7 +10,7 @@ namespace PlatformStorageSpike.Ingestor
     internal class Program
     {
         // reguired env-variables: PlatformSpike_BlobContainerConnectionString => the storage account to store blobs
-        //example: 10 SqlAzure|AzureTableStorage {other storage specific options}
+        //example: 10 SqlAzureAuditStore|AzureTableAuditStore {other storage specific options}
         static async Task Main(string[] args)
         {
             var numTestMessages = int.Parse(args[0]);
@@ -19,7 +19,8 @@ namespace PlatformStorageSpike.Ingestor
             var blobContainerClient = blobClient.GetBlobContainerClient("platform-spike-storage");
             await blobContainerClient.CreateIfNotExistsAsync().ConfigureAwait(false);
 
-            var indexStore = (IIndexStore)Activator.CreateInstance(Type.GetType(args[1]));
+            //Tomek and Andreas wanted to start with Audits we will need to tweak this for Errors
+            var indexStore = (IAuditIndexStore)Activator.CreateInstance(Type.GetType(args[1]));
             var isConfirmed = true; //This would be false when transport tx mode > receive only
 
             await indexStore.Initalize(args);
