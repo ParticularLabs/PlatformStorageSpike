@@ -2,7 +2,7 @@
   "profiles": {
     "PlatformStorageSpike.Ingestor": {
       "commandName": "Project",
-      "commandLineArgs": "10 AzureTableStorage"
+      "commandLineArgs": "10 SqlAzureAuditStore"
     }
   }
 }

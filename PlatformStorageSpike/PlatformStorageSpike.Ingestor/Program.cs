@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using PlatformStorageSpike.Ingestor.SQLAzure;
 
 namespace PlatformStorageSpike.Ingestor
 {
@@ -20,7 +22,7 @@ namespace PlatformStorageSpike.Ingestor
             await blobContainerClient.CreateIfNotExistsAsync().ConfigureAwait(false);
 
             //Tomek and Andreas wanted to start with Audits we will need to tweak this for Errors
-            var indexStore = (IAuditIndexStore)Activator.CreateInstance(Type.GetType(args[1]));
+            var indexStore = (IAuditIndexStore)Activator.CreateInstance(Type.GetType(args[1], true));
             var isConfirmed = true; //This would be false when transport tx mode > receive only
 
             await indexStore.Initalize(args);
@@ -33,14 +35,16 @@ namespace PlatformStorageSpike.Ingestor
 
         static async Task<IDictionary<string, string>> StoreMessageBodyHeaderAndMetaInBlob(BlobContainerClient blobContainerClient, bool isConfirmed)
         {
-            var messageIdHeaderName = "NServiceBus.MessageId";
+            var processedAt = DateTimeOffset.UtcNow.ToString();
+            var messageId = "7d6bce1d-829b-4fba-abc6-ab2900b53718";
+            var conversationId = "b613bb02-a97e-4298-a9e9-ab2900b53723";
 
             var body = new ReadOnlyMemory<byte>(new byte[5 * 1024]); //KB message body
             var headers = new Dictionary<string, string>
             {
-                {messageIdHeaderName, "7d6bce1d-829b-4fba-abc6-ab2900b53718"},
+                {MetadataKeys.MessageId, messageId},
+                {MetadataKeys.ConversationId, conversationId},
                 {"NServiceBus.ContentType", "text/xml"},
-                {"NServiceBus.ConversationId", "b613bb02-a97e-4298-a9e  9-ab2900b53723"},
                 {"NServiceBus.CorrelationId", "7d6bce1d-829b-4fba-abc6-ab2900b53718"},
                 {"NServiceBus.EnclosedMessageTypes", "Core7.Headers.Writers.MyNamespace.MessageToSend, MyAssembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"},
                 {"NServiceBus.MessageIntent", "Send"},
@@ -51,27 +55,25 @@ namespace PlatformStorageSpike.Ingestor
                 {"NServiceBus.Version", "7.2.0"},
             };
 
-            var messageId = headers[messageIdHeaderName];
-
-
-            var processedAt = DateTimeOffset.UtcNow.ToString();
             var processingEndpoint = "MyProcessingEndpoint";
-            var processingAttemptId = $"{messageId}-{processingEndpoint}-{processedAt}";
+            var processingId = DeterministicGuid.MakeId(messageId, processingEndpoint, processedAt).ToString();
 
             var processingMetadata = new Dictionary<string, string>
             {
-                { "ProcessingAttemptId", processingAttemptId },
+                { MetadataKeys.MessageId, messageId},
+                { MetadataKeys.ProcessingId, processingId },
+                { MetadataKeys.ConversationId, conversationId},
                 { "ProcessedAt", processedAt },
                 { "ProcessingEndpoint", processingEndpoint}
             };
 
             await StoreBodyAndHeaders(blobContainerClient, messageId, body, headers);
 
-            await StoreProcessingMetadata(blobContainerClient, processingAttemptId, processingMetadata, isConfirmed);
+            await StoreProcessingMetadata(blobContainerClient, processingId, processingMetadata, isConfirmed);
 
             if (!isConfirmed)
             {
-                await MarkProcessingMetadataAsConfirmed(blobContainerClient, processingAttemptId);
+                await MarkProcessingMetadataAsConfirmed(blobContainerClient, processingId);
             }
 
             return processingMetadata;
@@ -89,7 +91,7 @@ namespace PlatformStorageSpike.Ingestor
 
             var options = new BlobUploadOptions
             {
-                Metadata = headers
+                Metadata = headers.ToDictionary(kv => kv.Key.Replace('.', '_'), kv => kv.Value)
             };
 
             //NOTE: store headers in a separate blob if size is above 8KB

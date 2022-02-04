@@ -6,6 +6,6 @@ namespace PlatformStorageSpike.Ingestor
     internal interface IAuditIndexStore
     {
         Task Initalize(string[] args);
-        Task IndexMetadata(IDictionary<string, string> processingAttempt);
+        Task IndexMetadata(IDictionary<string, string> processingMetadata);
     }
 }

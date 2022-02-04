@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 public class AzureTableAuditStore : IAuditIndexStore
 {
-    public Task IndexMetadata(IDictionary<string, string> processingAttempt)
+    public Task IndexMetadata(IDictionary<string, string> processingMetadata)
     {
         throw new NotImplementedException();
     }
