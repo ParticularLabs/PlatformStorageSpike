@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Net.WebSockets;
 using Microsoft.VisualBasic;
@@ -52,6 +53,10 @@ internal class TestDataGenerator
             {MetadataKeys.MessageId, messageId},
             {MetadataKeys.ProcessingId, processingId},
             {MetadataKeys.ConversationId, conversationId},
+            {MetadataKeys.ProcessingTime, (TimeSpan.FromMilliseconds(new Random().Next(100) + 50)).ToString()},
+            {MetadataKeys.EnclosedMessages, typeof(SampleMessage).FullName},
+            {MetadataKeys.TimeSent, DateTime.Now.Subtract(TimeSpan.FromSeconds(new Random().Next(10))).ToString(CultureInfo.InvariantCulture)},
+            {MetadataKeys.ProcessingStatus, "1"},
             {"ProcessedAt", processedAt},
             {"ProcessingEndpoint", processingEndpoint}
         };
@@ -76,5 +81,9 @@ internal class TestDataGenerator
             {"NServiceBus.TimeSent", "2019-12-20 10:59:47:141171 Z"},
             {"NServiceBus.Version", "7.2.0"},
         };
+    }
+
+    public class SampleMessage
+    {
     }
 }
